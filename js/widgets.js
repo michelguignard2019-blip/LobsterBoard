@@ -853,9 +853,9 @@ const WIDGETS = {
             allProviders = allProviders.filter(p => providerFilter.includes(p.provider));
           }
           
-          // Hide unauthenticated providers if option is set
+          // Hide unauthenticated/errored providers if option is set
           if (hideUnauth) {
-            allProviders = allProviders.filter(p => !p.error || !p.error.includes('Not logged in'));
+            allProviders = allProviders.filter(p => !p.error);
           }
           
           const validProviders = allProviders.filter(p => !p.error);
@@ -866,14 +866,23 @@ const WIDGETS = {
           const compact = ${props.compactMode || false};
           const showPlan = ${props.showPlan !== false};
           
+          // Map provider IDs to icon IDs for theming
+          const providerIconMap = {
+            claude: 'claude-code', codex: 'codex-cli', copilot: 'github-copilot',
+            cursor: 'cursor', gemini: 'gemini-cli', amp: 'amp-code', factory: 'factory',
+            kimi: 'kimi-code', jetbrains: 'jetbrains-ai', minimax: 'minimax', zai: 'zai',
+            antigravity: 'antigravity'
+          };
+          
           for (const prov of allProviders) {
-            const icon = _esc(prov.icon || '⚪');
+            const iconId = providerIconMap[prov.provider] || 'ai-usage';
+            const iconEmoji = _esc(prov.icon || '⚪');
             const name = _esc(prov.name || prov.provider || 'Unknown');
             
             if (prov.error) {
               html += '<div style="padding:6px 0;border-bottom:1px solid var(--border,#30363d);">';
               html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">';
-              html += '<span style="font-size:16px;">' + icon + '</span>';
+              html += '<span class="lb-icon" data-icon="' + iconId + '" style="font-size:16px;">' + iconEmoji + '</span>';
               html += '<span style="font-weight:500;font-size:13px;">' + name + '</span>';
               html += '</div>';
               html += '<div style="color:#f85149;font-size:11px;padding-left:22px;">' + _esc(prov.error) + '</div>';
@@ -883,7 +892,7 @@ const WIDGETS = {
             
             html += '<div style="padding:6px 0;border-bottom:1px solid var(--border,#30363d);">';
             html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:' + (compact ? '2px' : '6px') + ';">';
-            html += '<span style="font-size:16px;">' + icon + '</span>';
+            html += '<span class="lb-icon" data-icon="' + iconId + '" style="font-size:16px;">' + iconEmoji + '</span>';
             html += '<span style="font-weight:500;font-size:13px;">' + name + '</span>';
             if (showPlan && prov.plan) {
               html += '<span style="font-size:10px;color:var(--text-muted);background:var(--bg-secondary);padding:1px 6px;border-radius:4px;margin-left:auto;">' + _esc(prov.plan) + '</span>';
