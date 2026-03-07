@@ -71,6 +71,8 @@ const WIDGET_ICONS = {
   
   // AI / Monitoring
   'ai-usage': { emoji: '🤖', phosphor: 'robot' },
+  'ai-usage-claude': { emoji: '🟣', phosphor: 'circle' },
+  'ai-usage-codex': { emoji: '🟢', phosphor: 'circle' },
   'ai-claude': { emoji: '🟣', phosphor: 'circle' },
   'ai-cost': { emoji: '💰', phosphor: 'currency-dollar' },
   'api-status': { emoji: '🔄', phosphor: 'arrows-clockwise' },
@@ -796,9 +798,10 @@ const WIDGETS = {
     properties: {
       title: 'AI Usage',
       providers: 'all',
+      hideUnauthenticated: true,
       showPlan: true,
       compactMode: false,
-      refreshInterval: 60
+      refreshInterval: 120
     },
     preview: `<div style="padding:4px;font-size:11px;color:#8b949e;">
       <div>🟣 Claude — 25% session</div>
@@ -831,11 +834,23 @@ const WIDGETS = {
             return;
           }
           
-          const allProviders = json.providers || [json];
-          const validProviders = allProviders.filter(p => !p.error);
-          const errorProviders = allProviders.filter(p => p.error);
+          let allProviders = json.providers || [json];
+          const hideUnauth = ${props.hideUnauthenticated !== false};
+          const providerFilter = '${props.providers || 'all'}'.split(',').map(s => s.trim()).filter(Boolean);
           
-          badge.textContent = validProviders.length + '/' + allProviders.length;
+          // Filter by selected providers
+          if (providerFilter.length && providerFilter[0] !== 'all') {
+            allProviders = allProviders.filter(p => providerFilter.includes(p.provider));
+          }
+          
+          // Hide unauthenticated providers if option is set
+          if (hideUnauth) {
+            allProviders = allProviders.filter(p => !p.error || !p.error.includes('Not logged in'));
+          }
+          
+          const validProviders = allProviders.filter(p => !p.error);
+          
+          badge.textContent = validProviders.length + (allProviders.length > validProviders.length ? '/' + allProviders.length : '');
           
           let html = '';
           const compact = ${props.compactMode || false};
@@ -907,7 +922,149 @@ const WIDGETS = {
         }
       }
       update_${props.id.replace(/-/g, '_')}();
-      setInterval(update_${props.id.replace(/-/g, '_')}, ${(props.refreshInterval || 60) * 1000});
+      setInterval(update_${props.id.replace(/-/g, '_')}, ${(props.refreshInterval || 120) * 1000});
+    `
+  },
+
+  'ai-usage-claude': {
+    privacyWarning: true,
+    name: 'Claude Usage',
+    icon: '🟣',
+    category: 'small',
+    description: 'Track Claude Code usage (session, weekly, Opus limits). Reads from local credentials.',
+    defaultWidth: 280,
+    defaultHeight: 180,
+    hasApiKey: false,
+    properties: {
+      title: 'Claude',
+      showPlan: true,
+      refreshInterval: 120
+    },
+    preview: `<div style="padding:4px;font-size:11px;color:#8b949e;">
+      <div>Session: 25%</div>
+      <div>Weekly: 12%</div>
+    </div>`,
+    generateHtml: (props) => `
+      <div class="dash-card" id="widget-${props.id}" style="height:100%;">
+        <div class="dash-card-head">
+          <span class="dash-card-title">🟣 ${props.title || 'Claude'}</span>
+          <span class="dash-card-badge" id="${props.id}-badge">—</span>
+        </div>
+        <div class="dash-card-body" id="${props.id}-content" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;">
+          <div style="color:var(--text-muted);font-size:11px;">Loading...</div>
+        </div>
+      </div>`,
+    generateJs: (props) => `
+      async function update_${props.id.replace(/-/g, '_')}() {
+        const content = document.getElementById('${props.id}-content');
+        const badge = document.getElementById('${props.id}-badge');
+        try {
+          const res = await fetch('/api/ai-usage/claude');
+          const data = await res.json();
+          if (data.error) {
+            content.innerHTML = '<div style="color:#f85149;font-size:11px;">' + _esc(data.error) + '</div>';
+            badge.textContent = '!';
+            return;
+          }
+          let html = '';
+          const showPlan = ${props.showPlan !== false};
+          if (showPlan && data.plan) {
+            badge.textContent = _esc(data.plan);
+          }
+          for (const m of (data.metrics || [])) {
+            const pct = m.used != null ? Math.min(100, Math.max(0, m.used)) : 0;
+            const color = pct > 80 ? '#f85149' : pct > 50 ? '#d29922' : '#3fb950';
+            if (m.format === 'dollars') {
+              const val = m.used != null ? '$' + m.used.toFixed(2) : '—';
+              html += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">';
+              html += '<span>' + _esc(m.label) + '</span><span style="color:#3fb950;">' + _esc(val) + '</span></div>';
+            } else {
+              html += '<div style="margin-bottom:4px;">';
+              html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">';
+              html += '<span>' + _esc(m.label) + '</span><span style="color:' + color + ';">' + pct.toFixed(0) + '%</span></div>';
+              html += '<div style="height:6px;background:var(--bg-tertiary,#21262d);border-radius:3px;overflow:hidden;">';
+              html += '<div style="width:' + pct + '%;height:100%;background:' + color + ';"></div></div></div>';
+            }
+          }
+          content.innerHTML = html || '<div style="color:var(--text-muted);font-size:11px;">No data</div>';
+        } catch (e) {
+          content.innerHTML = '<div style="color:#f85149;font-size:11px;">Error</div>';
+          badge.textContent = '!';
+        }
+      }
+      update_${props.id.replace(/-/g, '_')}();
+      setInterval(update_${props.id.replace(/-/g, '_')}, ${(props.refreshInterval || 120) * 1000});
+    `
+  },
+
+  'ai-usage-codex': {
+    privacyWarning: true,
+    name: 'Codex Usage',
+    icon: '🟢',
+    category: 'small',
+    description: 'Track Codex CLI usage (session, weekly, code reviews). Reads from local credentials.',
+    defaultWidth: 280,
+    defaultHeight: 180,
+    hasApiKey: false,
+    properties: {
+      title: 'Codex',
+      showPlan: true,
+      refreshInterval: 120
+    },
+    preview: `<div style="padding:4px;font-size:11px;color:#8b949e;">
+      <div>Session: 5%</div>
+      <div>Weekly: 10%</div>
+    </div>`,
+    generateHtml: (props) => `
+      <div class="dash-card" id="widget-${props.id}" style="height:100%;">
+        <div class="dash-card-head">
+          <span class="dash-card-title">🟢 ${props.title || 'Codex'}</span>
+          <span class="dash-card-badge" id="${props.id}-badge">—</span>
+        </div>
+        <div class="dash-card-body" id="${props.id}-content" style="display:flex;flex-direction:column;gap:4px;overflow-y:auto;">
+          <div style="color:var(--text-muted);font-size:11px;">Loading...</div>
+        </div>
+      </div>`,
+    generateJs: (props) => `
+      async function update_${props.id.replace(/-/g, '_')}() {
+        const content = document.getElementById('${props.id}-content');
+        const badge = document.getElementById('${props.id}-badge');
+        try {
+          const res = await fetch('/api/ai-usage/codex');
+          const data = await res.json();
+          if (data.error) {
+            content.innerHTML = '<div style="color:#f85149;font-size:11px;">' + _esc(data.error) + '</div>';
+            badge.textContent = '!';
+            return;
+          }
+          let html = '';
+          const showPlan = ${props.showPlan !== false};
+          if (showPlan && data.plan) {
+            badge.textContent = _esc(data.plan);
+          }
+          for (const m of (data.metrics || [])) {
+            const pct = m.used != null ? Math.min(100, Math.max(0, m.used)) : 0;
+            const color = pct > 80 ? '#f85149' : pct > 50 ? '#d29922' : '#3fb950';
+            if (m.format === 'dollars') {
+              const val = m.remaining != null ? '$' + m.remaining.toFixed(2) : '—';
+              html += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">';
+              html += '<span>' + _esc(m.label) + '</span><span style="color:#3fb950;">' + _esc(val) + '</span></div>';
+            } else {
+              html += '<div style="margin-bottom:4px;">';
+              html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">';
+              html += '<span>' + _esc(m.label) + '</span><span style="color:' + color + ';">' + pct.toFixed(0) + '%</span></div>';
+              html += '<div style="height:6px;background:var(--bg-tertiary,#21262d);border-radius:3px;overflow:hidden;">';
+              html += '<div style="width:' + pct + '%;height:100%;background:' + color + ';"></div></div></div>';
+            }
+          }
+          content.innerHTML = html || '<div style="color:var(--text-muted);font-size:11px;">No data</div>';
+        } catch (e) {
+          content.innerHTML = '<div style="color:#f85149;font-size:11px;">Error</div>';
+          badge.textContent = '!';
+        }
+      }
+      update_${props.id.replace(/-/g, '_')}();
+      setInterval(update_${props.id.replace(/-/g, '_')}, ${(props.refreshInterval || 120) * 1000});
     `
   },
 

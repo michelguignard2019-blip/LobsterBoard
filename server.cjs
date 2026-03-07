@@ -871,11 +871,45 @@ async function fetchCodexUsage() {
   }
 }
 
+// Cache for AI usage data (avoid 429 rate limits)
+const aiUsageCache = {
+  claude: { data: null, timestamp: 0 },
+  codex: { data: null, timestamp: 0 },
+};
+const AI_CACHE_TTL_MS = 120000; // 2 minutes cache
+
+// Cached fetch wrapper
+async function fetchWithCache(provider, fetchFn) {
+  const cache = aiUsageCache[provider];
+  const now = Date.now();
+  
+  // Return cached data if fresh
+  if (cache.data && (now - cache.timestamp) < AI_CACHE_TTL_MS) {
+    return { ...cache.data, cached: true };
+  }
+  
+  // Fetch fresh data
+  const result = await fetchFn();
+  
+  // Only cache successful results (not errors)
+  if (!result.error) {
+    cache.data = result;
+    cache.timestamp = now;
+  } else if (result.error.includes('429')) {
+    // On rate limit, return stale cache if available
+    if (cache.data) {
+      return { ...cache.data, cached: true, stale: true };
+    }
+  }
+  
+  return result;
+}
+
 // Get all AI usage data
-async function getAllAiUsage() {
+async function getAllAiUsage(options = {}) {
   const results = await Promise.all([
-    fetchClaudeUsage(),
-    fetchCodexUsage(),
+    fetchWithCache('claude', fetchClaudeUsage),
+    fetchWithCache('codex', fetchCodexUsage),
   ]);
   
   return {
