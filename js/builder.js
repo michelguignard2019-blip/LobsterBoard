@@ -1592,7 +1592,7 @@ function showProperties(widget) {
 
 // Properties already handled by hardcoded UI groups
 const HANDLED_PROPS = new Set([
-  'title', 'showHeader', 'refreshInterval', 'endpoint',
+  'title', 'showHeader', 'refreshInterval', 'endpoint', 'server', 'path',
   'fontSize', 'fontColor', 'textAlign', 'fontWeight',
   'showBorder', 'lineColor', 'lineThickness', 'columns', 'feedUrl', 'layout',
   'location', 'locations', 'units', 'format24h',
